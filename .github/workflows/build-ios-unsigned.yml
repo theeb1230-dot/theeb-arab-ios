@@ -1,0 +1,59 @@
+name: Build iOS Unsigned IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-ios:
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract Flutter source
+        run: |
+          rm -rf app
+          mkdir app
+          unzip -q Theeb-Arab-2.2.0-GitHub-IPA-Release-Source.zip -d app
+          test -f app/pubspec.yaml
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Flutter dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Build unsigned iOS app
+        working-directory: app
+        run: flutter build ios --release --no-codesign --dart-define=THEEB_TARGET=mobile
+
+      - name: Package unsigned IPA
+        working-directory: app
+        run: |
+          mkdir -p build/unsigned_ipa/Payload dist
+          cp -R build/ios/iphoneos/Runner.app build/unsigned_ipa/Payload/
+          cd build/unsigned_ipa
+          zip -qry ../../dist/Theeb-Arab-2.2.0-unsigned.ipa Payload
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Theeb-Arab-2.2.0-unsigned
+          path: app/dist/Theeb-Arab-2.2.0-unsigned.ipa
+
+      - name: Publish IPA in GitHub Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "ios-unsigned-${GITHUB_RUN_NUMBER}" \
+            app/dist/Theeb-Arab-2.2.0-unsigned.ipa \
+            --title "Theeb Arab 2.2.0 Unsigned IPA - Build ${GITHUB_RUN_NUMBER}" \
+            --notes "Unsigned iOS build generated automatically by GitHub Actions. This IPA must be signed before installation."
